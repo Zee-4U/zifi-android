@@ -22,14 +22,17 @@ object ArpScanner {
     }
 
     private fun getSubnetPrefix(): String? {
-        val ifaces = NetworkInterface.getNetworkInterfaces() ?: return null
+        val ifacesEnum = NetworkInterface.getNetworkInterfaces() ?: return null
+        // Convert Enumeration -> List for idiomatic iteration
+        val ifaces = java.util.Collections.list(ifacesEnum)
         for (iface in ifaces) {
             if (!iface.isUp || iface.isLoopback) continue
             if (!iface.name.startsWith("wlan")) continue
             for (addr in iface.interfaceAddresses) {
                 val ip = addr.address
-                if (ip.address.size == 4) { // IPv4
-                    val parts = ip.hostAddress?.split(".") ?: continue
+                // only IPv4
+                if (ip.address.size == 4) {
+                    val parts = ip.hostAddress.split(".")
                     if (parts.size == 4) return "${parts[0]}.${parts[1]}.${parts[2]}"
                 }
             }
@@ -42,9 +45,13 @@ object ArpScanner {
             async(Dispatchers.IO) {
                 try {
                     InetAddress.getByName("$subnetPrefix.$host").isReachable(150)
-                } catch (_: Exception) { /* ignore unreachable hosts */ }
+                } catch (_: Exception) {
+                    // return false for unreachable / error
+                    false
+                }
             }
         }
+        // wait for all pings to complete (results are not needed here)
         jobs.awaitAll()
     }
 
@@ -63,7 +70,9 @@ object ArpScanner {
                     }
                 }
             }
-        } catch (_: Exception) { /* /proc/net/arp unreadable on some ROMs */ }
+        } catch (_: Exception) {
+            // /proc/net/arp might be unreadable on some ROMs
+        }
         return results
     }
 }
